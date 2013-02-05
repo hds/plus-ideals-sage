@@ -60,14 +60,25 @@ class MontesType(object):
     def add_new_level(self, phi, omega, u):
         s = len(self.levels)
         lvl_s = self.levels[-1]
-        new_level = MontesTypeLevel(phi, omega, self.p)
+        new_level = MontesTypeLevel(phi, omega, self.prime)
 
         new_level.V = lvl_s.e^u
-        new_level.prode = lvl_s.prode * lvl_s.e
-        new_level.prodf = lvl_s.prodf * lvl_s.f
+        new_level.prod_e = lvl_s.prod_e * lvl_s.e
+        new_level.prod_f = lvl_s.prod_f * lvl_s.f
         
         # FIXME: p^f, f = what??
-        #new_level.Fq = FiniteField(p^new_level.prodf, 'z'+str(s), 
+        new_level.Fq = FiniteField(self.prime^new_level.prod_f, 'z'+str(s), lvl_s.res_pol)
+        new_level.Fqy = PolynomialRing(new_level.Fq, 'y'+str(s))
+
+        if lvl_s.f > 1:
+            new_level.z = new_level.Fq.0
+        else:
+            new_level.z = lvl_s.res_pol.coefficients()[0]
+
+        print "Fq: %s, Fpy: %s, z: %s" % (str(new_level.Fq), str(new_level.Fqy), str(new_level.z),)
+        
+        self.levels.append(new_level)
+        return new_level
 
     def __unicode__(self):
         return '(%s)' % (', '.join([unicode(l) for l in self.levels]))
@@ -199,11 +210,11 @@ class MontesType(object):
         # Reductum from magma
         res_pol = twist * lvl_s.Fqy(lvl_s.res_pol.coefficients()[:-1])
         u += lvl_s.f * lvl_s.h
-        phi0 = self.construct(s+1, res_pol, 0, u)
-        print "%d. Repr. = %s + phi^ef" % (s+1, phi0,)
+        phi0 = self.construct(s, res_pol, 0, u)
+        print "%d. Repr. = %s + phi^ef" % (s, phi0,)
 
         phi0 = phi0 + lvl_s.phi^(ef)
-        new_level = ...
+        new_level = self.add_new_level(phi0, omega, u)
 
     ## Construct ##
     def construct(self, i, res_pol, s, u):
@@ -216,7 +227,7 @@ class MontesType(object):
             endpoint of a segment of slope -lvl_i.slope supporting
             N_i(phi0)
         """
-        assert i <= len(self.levels), "i must be <= #levels"
+        assert i <= len(self.levels), "i (%d) must be <= #levels (%d)" % (i, len(self.levels),)
         lvl_i = self.levels[i-1]
         assert res_pol.degree() < lvl_i.f, "res_pol is too large."
         assert u + s*lvl_i.slope >= lvl_i.f*(lvl_i.e*lvl_i.V + lvl_i.h), "the point (s, u) is too low"
@@ -249,6 +260,8 @@ class MontesTypeLevel(object):
         self.e = None
         self.f = None
         self.h = None
+        self.prod_e = 1
+        self.prod_f = 1
 
         self.V = 0
         self.omega = omega
@@ -275,6 +288,8 @@ class MontesTypeLevel(object):
         copy.e = self.e
         copy.f = self.f
         copy.h = self.h
+        copy.prod_e = self.prod_e
+        copy.prod_f = self.prod_f
 
         copy.V = self.V
         copy.omega = self.omega
@@ -398,11 +413,14 @@ def montes_main_loop(K, p, tt):
                 print tt
                 lvl_r = tt.rth_level()
 
+                omega = factor[1]
                 lvl_r.res_pol = factor[0]
-                lvl_r.f = factor[0].degree()
+                lvl_r.f = lvl_r.res_pol.degree()
 
                 ## Representative
-                tt.representative(factor[1])
+                tt.representative(omega)
+
+                ## TODO: Working here.
 
 
 def phi_expansion(f, phi, omega):
