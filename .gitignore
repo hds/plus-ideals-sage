@@ -1,0 +1,3 @@
+*.pyc
+lib/plusideals.py
+test/basic.py
