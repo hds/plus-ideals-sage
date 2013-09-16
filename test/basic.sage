@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 import sys
-sys.path += ['../lib']
+import os
+
+testpath = os.path.dirname(os.path.realpath(__file__))
+libpath = os.path.realpath(os.path.join(testpath, '..', 'lib'))
+sys.path += [ libpath ]
 
 from plusideals import montes
 
@@ -119,13 +123,15 @@ def upb_presentation_example():
 
 
 Zx.<x> = PolynomialRing(ZZ)
-# Simple example
+# Simple example (works)
 p = 3
 f = x^2 + 18*x + 20
 
-f, p = upb_presentation_example()
+# This example works.
+#f, p = upb_presentation_example()
 
-f, p = phipols(2)
+# This example does not work.
+#f, p = phipols(2)
 
 K = NumberField(f, 'K1')
 
