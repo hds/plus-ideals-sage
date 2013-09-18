@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import pprint
+from sage.rings.finite_rings.constructor import is_PrimeFiniteField
 pp = pprint.PrettyPrinter(indent=4)
 
 def ab_slope(a, b, cloud):
@@ -99,6 +100,38 @@ class MontesType(object):
 
         self.levels.append(new_level)
 
+    def new_mapping(self, new_level):
+        s = len(self.levels)
+        lvl_s = self.levels[-1]
+
+        print "----=== New Mapping ===----"
+        rp_coeffs = list(lvl_s.res_pol)
+        #print "rp_coeffs:", rp_coeffs
+
+        t = var('t')
+        eqn = 0
+        for i in range(len(rp_coeffs)):
+            ff_coeffs = list(vector(rp_coeffs[i]))
+            #print "rp_coeffs[{0}] --> {1}".format(i, ff_coeffs)
+            c = 0
+            for j in range(len(ff_coeffs)):
+                c += t^j * ff_coeffs[j]
+            eqn += new_level.z^i * c
+        #print "eqn:", eqn
+        sol = solve(eqn, t)[0]
+        #print "class of y in current Fq: {0}".format(new_level.z)
+        
+        import string
+        z = new_level.z
+        dest_str = string.replace(string.replace('{0}'.format(sol.rhs()), '^', '**'), '{0}'.format(new_level.z), 'z')
+        #print z, dest_str
+        dest = eval(dest_str)
+        #print "{0} --> {1}".format(sol, dest)
+        print "F_{0}^{1} ---> F_{0}^{2}".format(self.prime, lvl_s.prod_f, new_level.prod_f)
+        print "{0} |------> {1}".format(lvl_s.z, dest)
+        new_level.z_dest = dest
+
+
     def add_new_level(self, phi, omega, u):
         s = len(self.levels)
         lvl_s = self.levels[-1]
@@ -111,6 +144,8 @@ class MontesType(object):
         # FIXME: p^f, f = what??
         # We want Fq to be the extension made by attaching lvl_s.res_pol to
         # lvl_s.Fqy, but that isn't possible in Sage just yet.
+        print "--=== Create new level: ===--"
+        print "F_%d^%d --> res_pol %s --> F_%d^%d" % (self.prime, lvl_s.prod_f, lvl_s.res_pol, self.prime, new_level.prod_f)
         new_level.Fq = FiniteField(self.prime^new_level.prod_f, 'z'+str(s))
         new_level.Fqy = PolynomialRing(new_level.Fq, 'y'+str(s))
 
@@ -118,6 +153,9 @@ class MontesType(object):
             new_level.z = new_level.Fq.0
         else:
             new_level.z = list(lvl_s.res_pol)[0]
+
+        if is_PrimeFiniteField(lvl_s.Fq) is False:
+            self.new_mapping(new_level)
 
         print "Fq: %s, Fpy: %s, z: %s" % (str(new_level.Fq), str(new_level.Fqy), str(new_level.z),)
         
@@ -309,6 +347,7 @@ class MontesType(object):
                 res_coeffs.append(lvl_i.Fq(0))
             elif i == 1:
                 # coefficients are polynomials too.
+                print "====\n{0}\n====".format(dev)
                 coeff = ZZ[x](ZZ(dev) // self.prime^(height))
                 res_coeffs.append(coeff(lvl_i.z))
 
@@ -322,10 +361,26 @@ class MontesType(object):
                 # coefficients are polynomials too.
                 coeff = self.residual_polynomial(i-1, dev)
                 print "------"
-                print coeff, "parent:", coeff.parent()
+                print list(coeff), "parent:", coeff.parent()
                 print lvl_i.z, "parent:", lvl_i.z.parent()
+                # FIXME: We need to manually raise the residual polynomial
+                # coefficients to F_i (from F_i-1).
+                if is_PrimeFiniteField(lvl_im1.Fq) == False:
+                    new_cs = [ ]
+                    for c in list(coeff):
+                        ff_c = list(vector(c))
+                        lifted_c = 0
+                        for i in range(len(ff_c)):
+                            lifted_c += (lvl_i.z_dest)**i * ff_c[i]
+                        print "{0} --> {1} --> {2}".format(c, ff_c, lifted_c)
+                        new_cs.append(lifted_c)
+                    lifted_coeff = lvl_i.Fqy(new_cs)
+                else:
+                    lifted_coeff = coeff
+                print list(lifted_coeff), "parent:", lifted_coeff.parent()
                 print "------"
-                res_coeffs.append(lvl_i.z^(twist_exp) * coeff(lvl_i.z))
+                F_i_elem = lifted_coeff(lvl_i.z)
+                res_coeffs.append(lvl_i.z^(twist_exp) * F_i_elem)
 
                 j = side_devs.index(dev)
                 #print "%d. order Res.Pol. c_%d = %s (z_%d = %s)" % (

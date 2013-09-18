@@ -131,7 +131,9 @@ f = x^2 + 18*x + 20
 #f, p = upb_presentation_example()
 
 # This example does not work.
-#f, p = phipols(2)
+f, p = phipols(2)
+
+print "Running Montes on f(x) = {0} in Z_{1}".format(f, p)
 
 K = NumberField(f, 'K1')
 
