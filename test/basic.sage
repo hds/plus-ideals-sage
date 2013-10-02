@@ -107,7 +107,7 @@ def phipols(i):
     phi = [phi1, phi2, phi3, phi4, phi5, phi6, phi7, phi8, phi9];
     p = 2
 
-    return phi[i], p
+    return phi[i-1], p
 
 def article_example():
     p = 2
@@ -124,14 +124,14 @@ def upb_presentation_example():
 
 Zx.<x> = PolynomialRing(ZZ)
 # Simple example (works)
-p = 3
-f = x^2 + 18*x + 20
+#p = 3
+#f = x^2 + 18*x + 20
 
 # This example works.
 #f, p = upb_presentation_example()
 
 # This example does not work.
-#f, p = phipols(2)
+f, p = phipols(2)
 
 K = NumberField(f, 'K1')
 

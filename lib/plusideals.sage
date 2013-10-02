@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import pprint
+from itertools import product
 pp = pprint.PrettyPrinter(indent=4)
 
 def ab_slope(a, b, cloud):
@@ -111,13 +112,23 @@ class MontesType(object):
         # FIXME: p^f, f = what??
         # We want Fq to be the extension made by attaching lvl_s.res_pol to
         # lvl_s.Fqy, but that isn't possible in Sage just yet.
-        new_level.Fq = FiniteField(self.prime^new_level.prod_f, 'z'+str(s))
+        new_level.Fq = FiniteField(self.prime^new_level.prod_f, 'w'+str(s))
         new_level.Fqy = PolynomialRing(new_level.Fq, 'y'+str(s))
 
+        new_level.embedding = Hom(lvl_s.Fq, new_level.Fq).list()[0]
+         
         if lvl_s.f > 1:
-            new_level.z = new_level.Fq.0
+            lifted_res_pol = new_level.Fqy(\
+                    [new_level.embedding(c) for c in lvl_s.res_pol])
+
+            for z in new_level.Fq.list():
+                if lifted_res_pol(z) == 0:
+                    new_level.z = z
+                    break
+            if new_level.z is None:
+                raise Exception, "Error: could not find class of y in {0} (res_pol = {1})".format(new_level.Fq, lvl_s.res_pol)
         else:
-            new_level.z = list(lvl_s.res_pol)[0]
+            new_level.z = -list(lvl_s.res_pol)[0]
 
         print "Fq: %s, Fpy: %s, z: %s" % (str(new_level.Fq), str(new_level.Fqy), str(new_level.z),)
         
@@ -321,11 +332,12 @@ class MontesType(object):
 
                 # coefficients are polynomials too.
                 coeff = self.residual_polynomial(i-1, dev)
+                lifted_coeff = lvl_i.Fqy([lvl_i.embedding(c) for c in coeff])
                 print "------"
-                print coeff, "parent:", coeff.parent()
-                print lvl_i.z, "parent:", lvl_i.z.parent()
+                print "coeff:", coeff, "parent:", coeff.parent()
+                print "z:", lvl_i.z, "parent:", lvl_i.z.parent()
                 print "------"
-                res_coeffs.append(lvl_i.z^(twist_exp) * coeff(lvl_i.z))
+                res_coeffs.append(lvl_i.z^(twist_exp) * lifted_coeff(lvl_i.z))
 
                 j = side_devs.index(dev)
                 #print "%d. order Res.Pol. c_%d = %s (z_%d = %s)" % (
@@ -406,14 +418,25 @@ class MontesType(object):
                     txp, s_im1 = divmod(lvl_im1.inv_h*height, lvl_im1.e)
                     u_im1 = (new_V - (s_im1 * lvl_im1.h)) // lvl_im1.e
                     c = (a*lvl_i.z^txp)
+                    # Doing the equivalent of (if Eltseq existed)
+                    #         lvl_im1.Fqy(Eltseq(c, lvl_im1.Fq))
                     if c.parent().base_ring() == lvl_im1.Fq:
                         new_res_pol = lvl_im1.Fqy(list(c.polynomial()))
                     else:
-                        # We currently can't get a representation of a finite
-                        # field element in a base field that isn't the prime
-                        # finite field. I think Sage ticket #8335 will fix this.
-                        raise NotImplementedError, "lvl_im1.Fq > prime finite field is not supported."
-                    pj = self.construct(i-1, new_res_pol, s_im1, u_im1)
+                        # FIXME: This is really ugly, we're searching all
+                        # combinations of "coefficients" in a polynomial in z
+                        # in order to find the correct one, something better
+                        # should be done here.
+                        eltseq = None
+                        for cs in product(*[list(lvl_im1.Fq) for j in range(0, lvl_im1.f)]):
+                            el = sum([lvl_i.embedding(cs[k])*lvl_i.z^k for k in range(0, lvl_im1.f)])
+                            if el == c:
+                                eltseq = list(cs)
+                        if eltseq is None:
+                            raise Exception, "Could not perform Eltseq({0}, {1})".format(c, lvl_im1.Fq)
+                        print "eltseq (i=%d) %s" % (i, list(a.polynomial()),)
+                        new_res_pol = lvl_im1.Fqy(eltseq)
+                        pj = self.construct(i-1, new_res_pol, s_im1, u_im1)
                 phi0 = (phi0 * var) + pj
                 new_V += step
                 height += lvl_i.h
@@ -450,6 +473,7 @@ class MontesTypeLevel(object):
         self.Fq = None
         self.z = None
         self.Fqy = None
+        self.embedding = None
 
         self.slope = None
         self.res_pol = None
@@ -479,6 +503,7 @@ class MontesTypeLevel(object):
         copy.Fq = self.Fq
         copy.z = self.z
         copy.Fqy = self.Fqy
+        copy.embedding = self.embedding
 
         copy.slope = self.slope
         copy.res_pol = self.res_pol
@@ -513,6 +538,8 @@ def montes(K, p, basis=False):
         raise Exception, "Error: def.pol. of K must be monic."
     # TODO: Add requirements that coefficients of f are integers
 
+    print "Running Montes for {0} in Z_{1}".format(f, p)
+
     reps_OM = [ ]
     trees = [ ]
     
@@ -532,6 +559,7 @@ def montes(K, p, basis=False):
         reps_OM[0].rth_level().slope = +Infinity
 
     print "OM Representatives:"
+    print len(reps_OM)
     for tt in reps_OM:
         print "   ", tt
 
@@ -542,6 +570,7 @@ def montes_main_loop(K, p, tt):
     leaves = [ ]
     type_stack = [ tt ]
     while len(type_stack) > 0:
+        print "STARTING LOOP:\n  type stack:", type_stack
         tt = type_stack.pop()
 
         r = len(tt.levels)
