@@ -99,7 +99,8 @@ class MontesType(object):
 
         new_level = MontesTypeLevel(phi, omega, p)
 
-        new_level.Fq = FiniteField(p^varphi.degree(), 'z0', varphi)
+        new_level.Fq = FiniteField(p^varphi.degree(), name='z0',
+                                   conway=True, prefix='ww')
         new_level.z = new_level.Fq.0
         new_level.Fqy = PolynomialRing(new_level.Fq, 'y0')
 
@@ -117,21 +118,19 @@ class MontesType(object):
         # FIXME: p^f, f = what??
         # We want Fq to be the extension made by attaching lvl_s.res_pol to
         # lvl_s.Fqy, but that isn't possible in Sage just yet.
-        new_level.Fq = FiniteField(self.prime^new_level.prod_f, 'w'+str(s))
+        new_level.Fq = FiniteField(self.prime^new_level.prod_f, name='w'+str(s),
+                                   conway=True, prefix='ww')
         new_level.Fqy = PolynomialRing(new_level.Fq, 'y'+str(s))
 
-        new_level.embedding = Hom(lvl_s.Fq, new_level.Fq).list()[0]
+        #new_level.embedding = Hom(lvl_s.Fq, new_level.Fq).list()[0]
          
         if lvl_s.f > 1:
-            lifted_res_pol = new_level.Fqy(\
-                    [new_level.embedding(c) for c in lvl_s.res_pol])
+            lifted_res_pol = new_level.Fqy(
+                    [new_level.Fq(c) for c in lvl_s.res_pol])
 
-            for z in new_level.Fq.list():
-                if lifted_res_pol(z) == 0:
-                    new_level.z = z
-                    break
-            if new_level.z is None:
-                raise Exception, "Error: could not find class of y in {0} (res_pol = {1})".format(new_level.Fq, lvl_s.res_pol)
+            # Take the first root of the residual polynomial in the new
+            # level's Fq[y].
+            new_level.z = lifted_res_pol.roots()[0][0]
         else:
             new_level.z = -list(lvl_s.res_pol)[0]
 
@@ -338,7 +337,7 @@ class MontesType(object):
 
                 # coefficients are polynomials too.
                 coeff = self.residual_polynomial(i-1, dev)
-                lifted_coeff = lvl_i.Fqy([lvl_i.embedding(c) for c in coeff])
+                lifted_coeff = lvl_i.Fqy([lvl_i.Fq(c) for c in coeff])
                 print "------"
                 print "coeff:", coeff, "parent:", coeff.parent()
                 print "z:", lvl_i.z, "parent:", lvl_i.z.parent()
@@ -431,11 +430,15 @@ class MontesType(object):
                         # combinations of "coefficients" in a polynomial in z
                         # in order to find the correct one, something better
                         # should be done here.
+                        print '#'*80
+                        print (('#'*16) + ' %d. WARNING: We are doing something very slow! ' + ('#'*17)) % (i,)
+                        print '#'*80
                         eltseq = None
                         for cs in product(*[list(lvl_im1.Fq) for j in range(0, lvl_im1.f)]):
-                            el = sum([lvl_i.embedding(cs[k])*lvl_i.z^k for k in range(0, lvl_im1.f)])
+                            el = lvl_i.Fqy([lvl_i.Fq(a) for a in cs])(lvl_i.z)
                             if el == c:
                                 eltseq = list(cs)
+                                break
                         if eltseq is None:
                             raise Exception, "Could not perform Eltseq({0}, {1})".format(c, lvl_im1.Fq)
                     print "%d.   Eltseq(%s, %s) = %s" % (i, c, lvl_im1.Fq, eltseq)
@@ -477,7 +480,7 @@ class MontesTypeLevel(object):
         self.Fq = None
         self.z = None
         self.Fqy = None
-        self.embedding = None
+        #self.embedding = None
 
         self.slope = None
         self.res_pol = None
@@ -507,7 +510,7 @@ class MontesTypeLevel(object):
         copy.Fq = self.Fq
         copy.z = self.z
         copy.Fqy = self.Fqy
-        copy.embedding = self.embedding
+        #copy.embedding = self.embedding
 
         copy.slope = self.slope
         copy.res_pol = self.res_pol
