@@ -11,6 +11,10 @@ def lower_convex_hull(cloud):
     """
     Computes the lower convex hull of a cloud of points.
     """
+    # Special case where our cloud is a single point.
+    if len(cloud) == 1:
+        return [ Side(0, list2point(cloud[0]), list2point(cloud[0])) ]
+
     slopes = [ [0, 1, ab_slope(0, 1, cloud)] ]
     b = 2
     while b < len(cloud):
@@ -82,7 +86,8 @@ class MontesType(object):
             self.add_initial_level(varphi, omega, p)
     
     def copy(self):
-        copy = MontesType(self.parent, self.prime, self.varphi, self.levels[0].omega, initial=False)
+        copy = MontesType(self.parent, self.prime, self.varphi,
+                          self.levels[0].omega, initial=False)
 
         for level in self.levels:
             copy.levels.append(level.copy())
@@ -96,7 +101,7 @@ class MontesType(object):
 
         new_level.Fq = FiniteField(p^varphi.degree(), 'z0', varphi)
         new_level.z = new_level.Fq.0
-        new_level.Fqy = PolynomialRing(new_level.Fq, 'y')
+        new_level.Fqy = PolynomialRing(new_level.Fq, 'y0')
 
         self.levels.append(new_level)
 
@@ -214,6 +219,7 @@ class MontesType(object):
                 all_devs.append(dev)
             n += self.lvl(i).V
 
+        print "%d. cloud: %s" % (i, cloud,)
         sides = lower_convex_hull(cloud)
         abscissas = [ p[0] for p in cloud ]    
 
@@ -398,12 +404,10 @@ class MontesType(object):
         var = lvl_i.phi^(lvl_i.e)
         phi0 = 0
         height = u - res_pol.degree()*lvl_i.h
-        print "res pol coeffs: %s (deg = %d)" % (list(res_pol), res_pol.degree())
-        print "%d. Construct res.pol. coeffs: %s (%s)" % (i, unicode(list(reversed(list(res_pol)))), res_pol)
+        print "%d. Construct res.pol. coeffs: %s" % (i, unicode(list(reversed(list(res_pol)))),)
         if i == 1:
             for a in reversed(list(res_pol)):
                 lift = ZZ[x](list(a.polynomial()))
-                print "eltseq (i=1) %s" % (list(a.polynomial()),)
 
                 phi0 = (phi0 * var) + (lift * self.prime^height)
                 height = height + lvl_i.h
@@ -421,7 +425,7 @@ class MontesType(object):
                     # Doing the equivalent of (if Eltseq existed)
                     #         lvl_im1.Fqy(Eltseq(c, lvl_im1.Fq))
                     if c.parent().base_ring() == lvl_im1.Fq:
-                        new_res_pol = lvl_im1.Fqy(list(c.polynomial()))
+                        eltseq = list(c.polynomial())
                     else:
                         # FIXME: This is really ugly, we're searching all
                         # combinations of "coefficients" in a polynomial in z
@@ -434,9 +438,9 @@ class MontesType(object):
                                 eltseq = list(cs)
                         if eltseq is None:
                             raise Exception, "Could not perform Eltseq({0}, {1})".format(c, lvl_im1.Fq)
-                        print "eltseq (i=%d) %s" % (i, list(a.polynomial()),)
-                        new_res_pol = lvl_im1.Fqy(eltseq)
-                        pj = self.construct(i-1, new_res_pol, s_im1, u_im1)
+                    print "%d.   Eltseq(%s, %s) = %s" % (i, c, lvl_im1.Fq, eltseq)
+                    new_res_pol = lvl_im1.Fqy(eltseq)
+                    pj = self.construct(i-1, new_res_pol, s_im1, u_im1)
                 phi0 = (phi0 * var) + pj
                 new_V += step
                 height += lvl_i.h
@@ -543,7 +547,7 @@ def montes(K, p, basis=False):
     reps_OM = [ ]
     trees = [ ]
     
-    res_pol = PolynomialRing(FiniteField(p), 'y')(f)
+    res_pol = PolynomialRing(FiniteField(p), 'y0')(f)
 
     for factor in res_pol.factor():
         print "Analysing irred. factor modulo p: %s" % (str(factor[0]),)
@@ -640,6 +644,7 @@ def montes_main_loop(K, p, tt):
             res_pol = tt.residual_polynomial(r, side_devs[i])
             res_pol = res_pol.monic()
             factors = res_pol.factor()
+            print "Res.Pol. factors: %s" % (list(factors),)
             
             factors_types = [ (factors[0], tt) ]
             if len(factors) > 1:
