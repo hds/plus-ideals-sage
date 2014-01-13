@@ -103,6 +103,7 @@ class MontesType(object):
                                    conway=True, prefix='ww')
         new_level.z = new_level.Fq.0
         new_level.Fqy = PolynomialRing(new_level.Fq, 'y0')
+        new_level.inv_M = matrix([])
 
         self.levels.append(new_level)
 
@@ -121,6 +122,7 @@ class MontesType(object):
         new_level.Fq = FiniteField(self.prime^new_level.prod_f, name='w'+str(s),
                                    conway=True, prefix='ww')
         new_level.Fqy = PolynomialRing(new_level.Fq, 'y'+str(s))
+        
 
         #new_level.embedding = Hom(lvl_s.Fq, new_level.Fq).list()[0]
          
@@ -133,6 +135,11 @@ class MontesType(object):
             new_level.z = lifted_res_pol.roots()[0][0]
         else:
             new_level.z = -list(lvl_s.res_pol)[0]
+
+        M = matrix([vector(new_level.z^j * lvl_s.Fq.gen()^k)
+                    for j in range(lvl_s.f)
+                    for k in range(lvl_s.prod_f)])
+        new_level.inv_M = M^(-1)
 
         print "Fq: %s, Fpy: %s, z: %s" % (str(new_level.Fq), str(new_level.Fqy), str(new_level.z),)
         
@@ -426,21 +433,21 @@ class MontesType(object):
                     if c.parent().base_ring() == lvl_im1.Fq:
                         eltseq = list(c.polynomial())
                     else:
-                        # FIXME: This is really ugly, we're searching all
-                        # combinations of "coefficients" in a polynomial in z
-                        # in order to find the correct one, something better
-                        # should be done here.
-                        print '#'*80
-                        print (('#'*16) + ' %d. WARNING: We are doing something very slow! ' + ('#'*17)) % (i,)
-                        print '#'*80
+                        # FIXME: It may not be the most efficient way of doing
+                        # this but it's pretty efficient for now. It is based
+                        # on this answer:
+                        # http://ask.sagemath.org/question/3398/representing-finite-field-elements-in-terms-of?answer=4540#4540
                         eltseq = None
-                        for cs in product(*[list(lvl_im1.Fq) for j in range(0, lvl_im1.f)]):
-                            el = lvl_i.Fqy([lvl_i.Fq(a) for a in cs])(lvl_i.z)
-                            if el == c:
-                                eltseq = list(cs)
-                                break
-                        if eltseq is None:
-                            raise Exception, "Could not perform Eltseq({0}, {1})".format(c, lvl_im1.Fq)
+                        w_im1 = lvl_im1.Fq.gen()
+                        prod_f = lvl_im1.prod_f
+                        m = vector(c) * lvl_i.inv_M
+                        eltseq = [lvl_im1.Fq(m[j*prod_f:(j+1)*prod_f])
+                                   for j in range(len(m)/prod_f)]
+                        if c != sum([eltseq[j]*lvl_i.z^j for j in range(len(eltseq))]):
+                            raise(Exception,
+                                 "Eltseq calculated incorrectly for {0}"\
+                                         .format(c))
+
                     print "%d.   Eltseq(%s, %s) = %s" % (i, c, lvl_im1.Fq, eltseq)
                     new_res_pol = lvl_im1.Fqy(eltseq)
                     pj = self.construct(i-1, new_res_pol, s_im1, u_im1)
@@ -480,6 +487,7 @@ class MontesTypeLevel(object):
         self.Fq = None
         self.z = None
         self.Fqy = None
+        self.inv_M = None
         #self.embedding = None
 
         self.slope = None
@@ -510,6 +518,7 @@ class MontesTypeLevel(object):
         copy.Fq = self.Fq
         copy.z = self.z
         copy.Fqy = self.Fqy
+        copy.inv_M = self.inv_M
         #copy.embedding = self.embedding
 
         copy.slope = self.slope
