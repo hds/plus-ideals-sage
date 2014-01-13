@@ -136,6 +136,9 @@ class MontesType(object):
         else:
             new_level.z = -list(lvl_s.res_pol)[0]
 
+        # FIXME: I think this is not needed when f == 1. It should be moved
+        # up to the relevant if statement above.
+        print "lvl_s.f", range(lvl_s.f), "lvl_s.prod_f", range(lvl_s.prod_f)
         M = matrix([vector(new_level.z^j * lvl_s.Fq.gen()^k)
                     for j in range(lvl_s.f)
                     for k in range(lvl_s.prod_f)])
@@ -157,7 +160,7 @@ class MontesType(object):
 
         self.remove_last_level()
 
-    def last_level(self, phiadic, side, side_dev, last_psi=True):
+    def add_last_level(self, phiadic, side, side_dev, last_psi=True):
         #tt.add_last_level(phiadic, sides[0], side_devs)
 
         r = len(self.levels)
@@ -460,6 +463,99 @@ class MontesType(object):
 
         return phi0
 
+    def single_factor_lifting(self, slope):
+        """
+        Perform single factor lifting on the representative of this type. The
+        aim is to make self.rth_level().slope >= slope.
+        """
+        r = len(self.levels)
+        lvl_r = self.rth_level()
+        
+        if lvl_r.slope >= slope:
+            return
+        if self.sfl[2] == 0:
+            self.sfl_init()
+
+        print "SFL:", self.sfl
+
+        
+    def sfl_init(self):
+        p = self.prime
+        lvl_r = self.rth_level()
+        prod_e = lvl_r.prod_e
+        a1 = self.phiadic[1] # FIXME: Why [1]?
+        psinum = ZZ[x](1)
+
+        r = len(self.levels) - 1
+        if r == 0:
+            nu = min([valuation(a, o) for a in a1])
+            # Evaluate a1/p^nu in z_1 (this may be z_0)
+            clss = (a1 // p^nu)(self.lvl(1).z)
+        else:
+            val, dev = self.value(r+1, a1, dev)
+            res_pol = self.residual_polynomial(r, dev)
+
+            logpsi = 0
+            qq, s = (-val).quo_rem(e)
+            psinum, logpsi = self.prescribed_value(s)
+
+            nu = -logpsi[0] - qq
+            vect = dev[-1][0] * self.lvl(r).log_phi + dev[-1][1]*self.lvl(r).log_pi
+            clss *= res_pol(self.lvl(r+1).z)
+
+        self.phiadic[2] = psinum
+        self.sfl[1] = nu
+        self.sfl[2] = 1
+
+        x0num = 0
+        x0den = 0
+
+        x0num, x0den = self.local_lift(clss^(-1))
+        self.phiadic[3] = x0num
+        self.sfl[3] = x0den
+
+    def prescribed_value(self, value):
+        """
+        From +Ideals:
+        If we are attached to the prime ideal P with Okutsu depth r, then
+        logpsi=[a_0, ..., a_r] and psi=phi_1^a_1 ... phi_r^a_r, with
+        v_P(p^a_0 psi(theta))=value.
+        """
+        psi = ZZ[x](1)
+        r = len(self.levels)
+        logspsi = (ZZ^r)(0)
+        qq, val = qq.quo_rem(self.rth_level().prod_e)
+        logpsi[0] = qq
+        if val > 0:
+            body = val
+            for k in reverse(range(r-2)):
+                jj = (self.levels[k].inv_h * body) % self.levels[k].e
+                logpsi[k+1] = jj
+                psi = psi * self.level[k].phi^jj
+                res = (body - jj*self.levels[k].h) // self.levels[k].e
+                body = res - jj*self.levels[k].V
+            logpsi[0] += res
+
+        return psi, logpsi
+
+    def local_lift(clss):
+        """
+        From +Ideals:
+        class should belong to the residue class field  type[r]`Fq. The output
+        is a pair g,e such that g(theta)/p^e is a lift to a P-integral element
+        in K and deg g(x)<n_P.
+        """
+        i = 1
+        while clss not in self.lvl(i).Fq:
+            i += 1
+
+        if i == 1:
+            numlift = ZZ[x](clss.polynomial())
+            denlift = 0
+        else:
+            raise(NotImplemented, "local lift not implemented for i > 1.")
+
+        return numlift, denlift
 
 
 class MontesTypeLevel(object):
@@ -579,6 +675,7 @@ def montes(K, p, basis=False):
     for tt in reps_OM:
         print "   ", tt
 
+    return reps_OM
     
 def montes_main_loop(K, p, tt):
     
@@ -608,7 +705,7 @@ def montes_main_loop(K, p, tt):
         starting_prod_f = lvl_r.prod_f
         print "index N: %d, length N: %d" % (index_N, length_N)
         if length_N == 1:
-            tt.last_level(phiadic, sides[0], side_devs[0])
+            tt.add_last_level(phiadic, sides[0], side_devs[0])
             print "  #### Found a factor of depth r = %d (%s):\n    %s\n" % (r-1, lvl_r.phi, tt)
             leaves.append(tt)
             sides = []

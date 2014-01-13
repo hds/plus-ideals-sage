@@ -131,10 +131,20 @@ Zx.<x> = PolynomialRing(ZZ)
 #f, p = upb_presentation_example()
 
 # This example does not work.
-f, p = phipols(2)
+#f, p = phipols(1)
+
+p = 2
+f = x^2 + 10*x + 53
 
 K = NumberField(f, 'K1')
 
-montes(K, p)
+reps_OM = montes(K, p)
+
+tt = reps_OM[0]
+print "Before:", tt.rth_level().phi
+tt.single_factor_lifting(8)
+print "After:", tt.rth_level().phi
+
+
 
 
