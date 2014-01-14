@@ -80,7 +80,7 @@ class MontesType(object):
         self.varphi = varphi
         self.levels = [ ]
         self.sfl = [0, 0, 0, 0] # Single Factor Lifting
-        self.phiadic = [self.pol.parent()(0) for i in range(0, 4)]
+        self.phiadic = [ZZ[x](0) for i in range(0, 4)]
 
         if initial is True:
             self.add_initial_level(varphi, omega, p)
@@ -116,14 +116,9 @@ class MontesType(object):
         new_level.prod_e = lvl_s.prod_e * lvl_s.e
         new_level.prod_f = lvl_s.prod_f * lvl_s.f
         
-        # FIXME: p^f, f = what??
-        # We want Fq to be the extension made by attaching lvl_s.res_pol to
-        # lvl_s.Fqy, but that isn't possible in Sage just yet.
         new_level.Fq = FiniteField(self.prime^new_level.prod_f, name='w'+str(s),
                                    conway=True, prefix='ww')
         new_level.Fqy = PolynomialRing(new_level.Fq, 'y'+str(s))
-        
-
         #new_level.embedding = Hom(lvl_s.Fq, new_level.Fq).list()[0]
          
         if lvl_s.f > 1:
@@ -133,19 +128,14 @@ class MontesType(object):
             # Take the first root of the residual polynomial in the new
             # level's Fq[y].
             new_level.z = lifted_res_pol.roots()[0][0]
+            M = matrix([vector(new_level.z^j * lvl_s.Fq.gen()^k)
+                        for j in range(lvl_s.f)
+                        for k in range(lvl_s.prod_f)])
+            new_level.inv_M = M^(-1)
         else:
             new_level.z = -list(lvl_s.res_pol)[0]
+            new_level.inv_M = lvl_s.inv_M
 
-        # FIXME: I think this is not needed when f == 1. It should be moved
-        # up to the relevant if statement above.
-        print "lvl_s.f", range(lvl_s.f), "lvl_s.prod_f", range(lvl_s.prod_f)
-        M = matrix([vector(new_level.z^j * lvl_s.Fq.gen()^k)
-                    for j in range(lvl_s.f)
-                    for k in range(lvl_s.prod_f)])
-        new_level.inv_M = M^(-1)
-
-        print "Fq: %s, Fpy: %s, z: %s" % (str(new_level.Fq), str(new_level.Fqy), str(new_level.z),)
-        
         self.levels.append(new_level)
         return new_level
 
@@ -154,7 +144,7 @@ class MontesType(object):
         if more_factors is True:
             self.lvl(r).refinements.append([self.lvl(r).phi,
                                             self.lvl(r).slope])
-        self.lvl(r).cuttingslope = ZZ(self.lvl(r+1).slope)
+        self.lvl(r).cutting_slope = ZZ(self.lvl(r+1).slope)
         self.lvl(r).phi = self.lvl(r+1).phi
         self.lvl(r).omega = self.lvl(r+1).omega
 
@@ -476,7 +466,21 @@ class MontesType(object):
         if self.sfl[2] == 0:
             self.sfl_init()
 
-        print "SFL:", self.sfl
+        print "SFL: {0} (slope: {1})".format(self.sfl, self.rth_level().slope)
+
+        p = self.prime
+        exponent = self.sfl[0]
+        nu = self.sfl[1]
+        x0prec = self.sfl[2]
+        x0num = self.phiadic[3]
+        x0den = self.sfl[3]
+
+        e = lvl_r.prod_e
+        h = lvl_r.h - lvl_r.cutting_slope
+        last_h = slope - lvl_r.cutting_slope
+        V = lvl_r.V + lvl_r.cutting_slope
+        
+
 
         
     def sfl_init(self):
@@ -488,7 +492,7 @@ class MontesType(object):
 
         r = len(self.levels) - 1
         if r == 0:
-            nu = min([valuation(a, o) for a in a1])
+            nu = min([valuation(a, p) for a in a1])
             # Evaluate a1/p^nu in z_1 (this may be z_0)
             clss = (a1 // p^nu)(self.lvl(1).z)
         else:
@@ -538,7 +542,7 @@ class MontesType(object):
 
         return psi, logpsi
 
-    def local_lift(clss):
+    def local_lift(self, clss):
         """
         From +Ideals:
         class should belong to the residue class field  type[r]`Fq. The output
@@ -805,8 +809,8 @@ def phi_expansion(f, phi, omega):
     quos = [ ]
     for j in [0..omega]:
         q, r = q.quo_rem(phi)
-        coeffs.append(r)
-        quos.append(q)
+        coeffs.append(ZZ[x](r))
+        quos.append(ZZ[x](q))
 
     return coeffs, quos
 
