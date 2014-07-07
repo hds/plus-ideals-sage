@@ -159,7 +159,7 @@ class MontesType(object):
         if r > 1:
             # FIXME: What does nur stand for?
             nur = sum([self.lvl(j).slope/self.lvl(j).prod_e for j in [1..r-1]])
-            self.sfl = floor((lvl_r.V/lvl_r.prod_e)-nur)
+            self.sfl[0] = floor((lvl_r.V/lvl_r.prod_e)-nur)
 
         if side.p1.x == 0:
             slope = -side.slope
@@ -475,13 +475,106 @@ class MontesType(object):
         x0num = self.phiadic[3]
         x0den = self.sfl[3]
 
-        e = lvl_r.prod_e
+        prod_e = lvl_r.prod_e
         h = lvl_r.h - lvl_r.cutting_slope
         last_h = slope - lvl_r.cutting_slope
         V = lvl_r.V + lvl_r.cutting_slope
-        
+
+        ## BEGIN p-adic SECTION (THIS DOESN'T WORK)
+        ZZp = Zp(p, nu+exponent+ceil((V+2*last_h)/2))
+        # print ZZp
+        # print nu+exponent+ceil((V+2*last_h)/2)
+        pi_ZZp = ZZp.uniformizer()
+        ZZpX.<X> = PolynomialRing(ZZp)
+        pol_ZZp = ZZpX(self.pol)
+        psinum_ZZp = ZZpX(self.phiadic[2])
+        # print pi_ZZp
+        # print (nu+exponent+ceil((V+2*h)/2))
+        zq = ZZp.quotient(pi_ZZp^(nu+exponent+ceil((V+2*h)/2)), 'zq0')
+        #zqt.<t> = PolynomialRing(zq)
+        # FIXME: It appears that p-adic ring elements don't have the
+        # quo_rem method, so there are lots of things we can't do with
+        # the quotient ring. Looking into this.
+        #AttributeError: 'sage.rings.padics.padic_capped_relative_element.pAdicCappedRelativeElement' object has no attribute 'quo_rem'
+        #phi = zqt(lvl_r.phi)
+        #psinum = zqt(psinum_ZZp)
+        ## END p-adic SECTION
+
+        psinum_zp = self.pol.parent()(self.phiadic[2])
+        zq = ZZ.quotient(p^(nu+exponent+ceil((V+2*h)/prod_e)), 'zq0')
+        zqt.<t> = PolynomialRing(zq)
+
+        phi = zqt(lvl_r.phi)
+        psinum = zqt(psinum_zp)
+
+        print self.phiadic
+        print zqt
+        a0num, a0den = self.reduce((zqt(self.phiadic[0])*psinum) % phi, nu)
+        print "a0 num, den:", a0num, a0den
+        a1num, a1den = self.reduce((zqt(self.phiadic[1])*psinum) % phi, nu)
+        print "a1 num, den:", a1num, a1den
+
+        while x0prec < h:
+            x0prec *= 2
+            low_precision = 2 * exponent + ceil(x0prec/prod_e)
+            x0num, x0den = self.inversion_loop([ a1num, a1den], x0num, x0den,
+                                               phi, low_precision)
+            print "x0 num, den:", x0num, x0den
 
 
+        anum, aden = self.reduce((a0num*zqt(x0num)) % phi, x0den+a0den)
+        phi = phi + anum
+        h *= 2
+
+        print "between:", [anum, aden, phi, h]
+
+        print "--==--==--==--==--==--==--"
+
+        while h < last_h:
+            zq = ZZ.quotient(self.prime^(nu + exponent + ceil((V+2*h)/prod_e)))
+            zqt.<t> = PolynomialRing(zq)
+            phi = zqt(phi)
+
+            psinum = zqt(psinum)
+            qq, c0 = zqt(self.pol).quo_rem(phi)
+            print zq, "= {0}^{1}".format(self.prime, zq.characteristic().valuation(self.prime))
+
+            c1 = qq % phi
+            print qq.parent()
+            print phi.parent()
+            print c1.parent()
+            print "qq, c0:", [qq, c0] 
+            print "c1, psinum, nu:", [c1, psinum, nu] 
+            c0num, c0den = self.reduce((c0*psinum) % phi, nu)
+            c1num, c1den = self.reduce((c1*psinum) % phi, nu)
+
+            print "cs:", [c1, c0num, c0den, c1num, c1den]
+
+            low_precision = 2 * exponent + ceil(h/prod_e)
+            print "inv loop:", [[c1num, c1den], x0num, x0den, phi, low_precision]
+            x0num, x0den = self.inversion_loop([c1num, c1den], x0num, x0den,
+                                               phi, low_precision)
+            print "x0 num, den", x0num, x0den
+
+            cnum, cden = self.reduce((c0num * zqt(x0num)) % phi, x0den+c0den)
+            phi = phi + cnum
+            h *= 2
+
+            #raise NotImplementedError, "The second SFL loop isn't finished yet."
+            print "phi:", phi
+            print "--------------------------"
+
+
+        print "--==--==--==--==--==--==--"
+
+        self.sfl[2] = h // 2
+        lvl_r.phi = lvl_r.phi.parent()(phi)
+        self.phiadic[3] = x0num
+        self.sfl[3] = x0den
+
+        print zq, "= {0}^{1}".format(self.prime, zq.characteristic().valuation(self.prime))
+        print "sfl end:", [self.sfl[2], lvl_r.phi, self.phiadic[3], self.sfl]
+        print "--==--==--==--==--==--==--"
         
     def sfl_init(self):
         p = self.prime
@@ -496,16 +589,17 @@ class MontesType(object):
             # Evaluate a1/p^nu in z_1 (this may be z_0)
             clss = (a1 // p^nu)(self.lvl(1).z)
         else:
-            val, dev = self.value(r+1, a1, dev)
+            val, dev = self.value(r+1, a1)
             res_pol = self.residual_polynomial(r, dev)
 
             logpsi = 0
-            qq, s = (-val).quo_rem(e)
+            qq, s = (-val).quo_rem(prod_e)
             psinum, logpsi = self.prescribed_value(s)
 
             nu = -logpsi[0] - qq
-            vect = dev[-1][0] * self.lvl(r).log_phi + dev[-1][1]*self.lvl(r).log_pi
-            clss *= res_pol(self.lvl(r+1).z)
+            vector = dev[-1][0] * self.lvl(r).log_phi + dev[-1][1]*self.lvl(r).log_pi
+            klass = self.convert_logs(logpsi + vector)
+            klass *= res_pol(self.lvl(r+1).z)
 
         self.phiadic[2] = psinum
         self.sfl[1] = nu
@@ -514,7 +608,7 @@ class MontesType(object):
         x0num = 0
         x0den = 0
 
-        x0num, x0den = self.local_lift(clss^(-1))
+        x0num, x0den = self.local_lift(klass^(-1))
         self.phiadic[3] = x0num
         self.sfl[3] = x0den
 
@@ -527,8 +621,8 @@ class MontesType(object):
         """
         psi = ZZ[x](1)
         r = len(self.levels)
-        logspsi = (ZZ^r)(0)
-        qq, val = qq.quo_rem(self.rth_level().prod_e)
+        logpsi = (ZZ^r)(0)
+        qq, val = value.quo_rem(self.rth_level().prod_e)
         logpsi[0] = qq
         if val > 0:
             body = val
@@ -561,6 +655,53 @@ class MontesType(object):
 
         return numlift, denlift
 
+    def convert_logs(self, log):
+        """"
+        From +Ideals:
+        log[1] is not used. The product of all Phi_i^log[i] for i>0 should have
+        integer value M.
+
+        The output is the class of this product divided by p^M.
+        """
+
+        vector = log
+        z = 0
+        klass = self.lvl(1).Fq.prime_subfield()(1)
+        for i in reversed(range(len(vector)-1)):
+            ti = vector[i+1] // self.levels[i].prod_e
+            z = self.levels[i].z
+            klass *= z^ti
+            vector = vector - ti*self.levels[i].log_gamma
+
+        return klass
+
+    def reduce(self, poly, den):
+        if poly == 0:
+            return poly, 0
+
+        cancel = min([den] + [ a.valuation(self.prime) for a in poly])
+        zq = poly[0].parent()
+        print "poly, p^cancel: {0}, p^{1}".format(poly, cancel)
+        num = poly.parent()([ ZZ(c) / self.prime^cancel for c in poly ])
+        print "num: {0}".format(num)
+        #num = poly / self.prime^cancel
+
+        return num, den-cancel
+
+    def inversion_loop(self, A, xnum, xden, phi, precision):
+        anum = A[0]
+        aden = A[1]
+
+        zqq = ZZ.quotient(self.prime^precision, 'zqq0')
+        piq = zqq(self.prime)
+        zqqt.<t> = PolynomialRing(zqq)
+        phip = zqqt(phi)
+        xnum = zqqt(xnum)
+        
+        x1num, x1den = self.reduce(2*piq^(xden+aden) - (zqqt(anum)*xnum) % phip, xden+aden)
+        xnum, xden = self.reduce((xnum*x1num) % phip, xden+x1den)
+
+        return xnum, xden
 
 class MontesTypeLevel(object):
 
@@ -813,4 +954,5 @@ def phi_expansion(f, phi, omega):
         quos.append(ZZ[x](q))
 
     return coeffs, quos
+
 
