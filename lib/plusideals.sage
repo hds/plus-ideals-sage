@@ -481,15 +481,10 @@ class MontesType(object):
         V = lvl_r.V + lvl_r.cutting_slope
 
         ## BEGIN p-adic SECTION (THIS DOESN'T WORK)
-        ZZp = Zp(p, nu+exponent+ceil((V+2*last_h)/2))
-        # print ZZp
-        # print nu+exponent+ceil((V+2*last_h)/2)
-        pi_ZZp = ZZp.uniformizer()
-        ZZpX.<X> = PolynomialRing(ZZp)
-        pol_ZZp = ZZpX(self.pol)
-        psinum_ZZp = ZZpX(self.phiadic[2])
-        # print pi_ZZp
-        # print (nu+exponent+ceil((V+2*h)/2))
+        zp = Zp(p, nu+exponent+ceil((V+last_h)/prod_e))
+        zpx = PolynomialRing(zp, 'X')
+        pol_zp = zpx(self.pol)
+        psinum_zp = zpx(self.phiadic[2])
         zq = ZZp.quotient(pi_ZZp^(nu+exponent+ceil((V+2*h)/2)), 'zq0')
         #zqt.<t> = PolynomialRing(zq)
         # FIXME: It appears that p-adic ring elements don't have the
@@ -955,4 +950,27 @@ def phi_expansion(f, phi, omega):
 
     return coeffs, quos
 
+def path_of_precision(n, h):
+    q = n
+    path = [ n ]
+
+    while q > h:
+        q, a = q.quo_rem(2)
+        q += a
+        path.insert(0, q)
+
+    return path
+
+def change_precision(a, prec):
+    if not isinstance(a.parent(), sage.rings.padics.local_generic.LocalGeneric):
+        # We assume it's a polynomial.
+        return a.parent()([ change_precision(c, prec) for c in a])
+
+    current_prec = a.precision_absolute()
+    if prec > current_prec:
+        a = a.lift_to_precision(prec)
+    else:
+        a = a.add_bigoh(prec)
+
+    return a
 
