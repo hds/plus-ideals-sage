@@ -9,17 +9,21 @@ sys.path += [ libpath ]
 from plusideals import montes, path_of_precision, change_precision
 
 
-print path_of_precision(121, 6)
+p = 2
+f = x^12 + p^2*x^6 + p^4*x^3 + p^6
 
-p = 3
-zp = Zp(p, type='capped-abs', prec=5)
-a = zp(67)
-zpx.<x> = PolynomialRing(zp)
+K = NumberField(f, 'theta')
 
-f = zpx([67, 7, 0, 1])
+om_reps = montes(K, p)
 
-print f
-g = change_precision(f, 2)
-print g
+tt = om_reps[0]
 
-print change_precision(g, 4)
+print "\n--------------------------------"
+print "Before: {0} (slope: {1})"\
+        .format(tt.rth_level().phi, tt.rth_level().slope)
+
+tt.single_factor_lifting(20)
+
+print "After: {0} (slope: {1})"\
+        .format(tt.rth_level().phi, tt.rth_level().slope)
+

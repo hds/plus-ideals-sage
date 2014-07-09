@@ -468,6 +468,7 @@ class MontesType(object):
 
         print "SFL: {0} (slope: {1})".format(self.sfl, self.rth_level().slope)
 
+        pmode = 'terse'
         p = self.prime
         exponent = self.sfl[0]
         nu = self.sfl[1]
@@ -480,96 +481,87 @@ class MontesType(object):
         last_h = slope - lvl_r.cutting_slope
         V = lvl_r.V + lvl_r.cutting_slope
 
-        ## BEGIN p-adic SECTION (THIS DOESN'T WORK)
-        zp = Zp(p, nu+exponent+ceil((V+last_h)/prod_e))
-        zpx = PolynomialRing(zp, 'X')
+        zp = Zp(p, nu + exponent + ceil((V+last_h)/prod_e), type='capped-abs',
+                                                            print_mode=pmode)
+        zpx = PolynomialRing(zp, 'X0')
         pol_zp = zpx(self.pol)
         psinum_zp = zpx(self.phiadic[2])
-        zq = ZZp.quotient(pi_ZZp^(nu+exponent+ceil((V+2*h)/2)), 'zq0')
-        #zqt.<t> = PolynomialRing(zq)
-        # FIXME: It appears that p-adic ring elements don't have the
-        # quo_rem method, so there are lots of things we can't do with
-        # the quotient ring. Looking into this.
-        #AttributeError: 'sage.rings.padics.padic_capped_relative_element.pAdicCappedRelativeElement' object has no attribute 'quo_rem'
-        #phi = zqt(lvl_r.phi)
-        #psinum = zqt(psinum_ZZp)
-        ## END p-adic SECTION
 
-        psinum_zp = self.pol.parent()(self.phiadic[2])
-        zq = ZZ.quotient(p^(nu+exponent+ceil((V+2*h)/prod_e)), 'zq0')
+        path = path_of_precision(last_h, h)
+        short_path = path_of_precision(h, x0prec)
+
+        zp = Zp(p, nu + exponent + ceil(h/prod_e), type='capped-abs',
+                                              print_mode=pmode)
+        print "That precision:", nu + exponent + ceil(h/prod_e);
+        zpx = PolynomialRing(zp, 'X')
+        a1 = zpx(self.phiadic[1])
+
+        zq = Zp(p, nu + exponent + ceil((V+path[1])/prod_e), type='capped-abs',
+                                                        print_mode=pmode)
         zqt.<t> = PolynomialRing(zq)
-
         phi = zqt(lvl_r.phi)
         psinum = zqt(psinum_zp)
 
-        print self.phiadic
-        print zqt
-        a0num, a0den = self.reduce((zqt(self.phiadic[0])*psinum) % phi, nu)
-        print "a0 num, den:", a0num, a0den
-        a1num, a1den = self.reduce((zqt(self.phiadic[1])*psinum) % phi, nu)
-        print "a1 num, den:", a1num, a1den
 
-        while x0prec < h:
-            x0prec *= 2
-            low_precision = 2 * exponent + ceil(x0prec/prod_e)
-            x0num, x0den = self.inversion_loop([ a1num, a1den], x0num, x0den,
-                                               phi, low_precision)
-            print "x0 num, den:", x0num, x0den
-
-
-        anum, aden = self.reduce((a0num*zqt(x0num)) % phi, x0den+a0den)
-        phi = phi + anum
-        h *= 2
-
-        print "between:", [anum, aden, phi, h]
+        a0num, a0den = self.cancel((zqt(self.phiadic[0])*psinum) % phi, nu)
+        print "a0 num, den:", [a0num, a0den]
+        a1num, a1den = self.cancel((zqt(a1)*psinum) % phi, nu)
+        print "a1 num, den:", [a1num, a1den]
 
         print "--==--==--==--==--==--==--"
 
-        while h < last_h:
-            zq = ZZ.quotient(self.prime^(nu + exponent + ceil((V+2*h)/prod_e)))
-            zqt.<t> = PolynomialRing(zq)
-            phi = zqt(phi)
+        for i in range(1, len(short_path)):
+            low_precision = a1den + 2 * x0den  + ceil(short_path[i]/prod_e)
+            x0num, x0den = self.inversion_loop([ a1num, a1den], x0num, x0den,
+                                               phi, low_precision)
+            print "x0 num, den:", x0num, x0den
+            print '----'
 
-            psinum = zqt(psinum)
-            qq, c0 = zqt(self.pol).quo_rem(phi)
-            print zq, "= {0}^{1}".format(self.prime, zq.characteristic().valuation(self.prime))
+        print "--==--==--==--==--==--==--"
+
+        anum, aden = self.cancel((a0num*zqt(x0num)) % phi, x0den+a0den)
+        phi = phi + anum
+
+        print "between:", [anum, aden, phi]
+        print "--==--==--==--==--==--==--"
+
+        for i in range(1, len(path)-1):
+            loop_prec = nu + exponent + ceil((V+path[i+1])/prod_e)
+            print "Loop prec:", loop_prec;
+            zq = Zp(p, loop_prec, type='capped-abs', print_mode=pmode)
+            zqt.<t> = PolynomialRing(zq)
+            phi = change_precision(zqt(phi), loop_prec)
+
+            psinum = zqt(psinum_zp)
+            qq, c0 = zqt(pol_zp).quo_rem(phi)
 
             c1 = qq % phi
-            print qq.parent()
-            print phi.parent()
-            print c1.parent()
-            print "qq, c0:", [qq, c0] 
-            print "c1, psinum, nu:", [c1, psinum, nu] 
-            c0num, c0den = self.reduce((c0*psinum) % phi, nu)
-            c1num, c1den = self.reduce((c1*psinum) % phi, nu)
 
-            print "cs:", [c1, c0num, c0den, c1num, c1den]
+            c0num, c0den = self.cancel((c0*psinum) % phi, nu)
+            c1num, c1den = self.cancel((c1*psinum) % phi, nu)
 
-            low_precision = 2 * exponent + ceil(h/prod_e)
-            print "inv loop:", [[c1num, c1den], x0num, x0den, phi, low_precision]
+            #print "cs:", [c1, c0num, c0den, c1num, c1den]
+
+            low_precision = c1den + 2 * x0den + ceil(path[i]/prod_e)
             x0num, x0den = self.inversion_loop([c1num, c1den], x0num, x0den,
                                                phi, low_precision)
-            print "x0 num, den", x0num, x0den
+            #print "x0 num, den", x0num, x0den
 
-            cnum, cden = self.reduce((c0num * zqt(x0num)) % phi, x0den+c0den)
+            xnum = change_precision(zqt(x0num), loop_prec)
+            cnum, cden = self.cancel((c0num * zqt(x0num)) % phi, x0den)
             phi = phi + cnum
-            h *= 2
 
-            #raise NotImplementedError, "The second SFL loop isn't finished yet."
             print "phi:", phi
             print "--------------------------"
 
 
         print "--==--==--==--==--==--==--"
 
-        self.sfl[2] = h // 2
+        self.sfl[2] = max(h, path[-2])
         lvl_r.phi = lvl_r.phi.parent()(phi)
         self.phiadic[3] = x0num
         self.sfl[3] = x0den
 
-        print zq, "= {0}^{1}".format(self.prime, zq.characteristic().valuation(self.prime))
-        print "sfl end:", [self.sfl[2], lvl_r.phi, self.phiadic[3], self.sfl]
-        print "--==--==--==--==--==--==--"
         
     def sfl_init(self):
         p = self.prime
@@ -670,7 +662,7 @@ class MontesType(object):
 
         return klass
 
-    def reduce(self, poly, den):
+    def cancel(self, poly, den):
         if poly == 0:
             return poly, 0
 
@@ -687,14 +679,13 @@ class MontesType(object):
         anum = A[0]
         aden = A[1]
 
-        zqq = ZZ.quotient(self.prime^precision, 'zqq0')
-        piq = zqq(self.prime)
-        zqqt.<t> = PolynomialRing(zqq)
-        phip = zqqt(phi)
-        xnum = zqqt(xnum)
+        zq = Zp(self.prime, precision, type='capped-abs', print_mode='terse')
+        zqt.<t> = PolynomialRing(zq)
+        phip = zqt(phi)
+        xnum = zqt(xnum)
         
-        x1num, x1den = self.reduce(2*piq^(xden+aden) - (zqqt(anum)*xnum) % phip, xden+aden)
-        xnum, xden = self.reduce((xnum*x1num) % phip, xden+x1den)
+        x1num, x1den = self.cancel(2*self.prime^(xden+aden) - (zqt(anum)*xnum) % phip, xden+aden)
+        xnum, xden = self.cancel((xnum*x1num) % phip, xden+x1den)
 
         return xnum, xden
 
@@ -966,8 +957,7 @@ def change_precision(a, prec):
         # We assume it's a polynomial.
         return a.parent()([ change_precision(c, prec) for c in a])
 
-    current_prec = a.precision_absolute()
-    if prec > current_prec:
+    if prec > a.precision_absolute():
         a = a.lift_to_precision(prec)
     else:
         a = a.add_bigoh(prec)
